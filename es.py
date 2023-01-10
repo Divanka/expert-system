@@ -15,9 +15,13 @@ class Ui_MainWindow(object):
     questions = []
     answers = []
     next_questions = []
+    parameters = []
     rules = []
     radio_buts = []
     id_quest = 0
+    user_answers = {}
+    rules_simple = []
+    rules_complex = []
 
     conn = psycopg2.connect(dbname='ES', user='postgres', 
                         password='123456', host='localhost')
@@ -71,8 +75,29 @@ class Ui_MainWindow(object):
         self.radio_buts = [self.radioButton, self.radioButton_2, self.radioButton_3]
 
         self.pushButton.clicked.connect(self.click)
+
+
     def end(self):
-        sys.exit(app.exec())
+        for j in range(3):
+            self.radio_buts[j].setHidden(True)
+        self.pushButton.setEnabled(False)
+
+        self.cur.execute('SELECT * FROM answer')
+        rows = self.cur.fetchall()
+        for row in rows:
+            self.user_answers[row[2]] = row[1]
+
+        for r_s in self.rules_simple:
+            if r_s[0] in self.user_answers:
+                if self.user_answers[r_s[0]] == r_s[1]:
+                    self.label.setText(r_s[2])
+                    break
+        for r_c in self.rules_complex:
+            if r_c[0][0] in self.user_answers or r_c[1][0] in self.user_answers:
+                if self.user_answers[r_c[0][0]] == r_c[0][1] and self.user_answers[r_c[1][0]] == r_c[1][1]:
+                    self.label.setText(r_c[2])
+                    break
+            
 
     def db(self):
         #удалить все в ответах
@@ -87,11 +112,22 @@ class Ui_MainWindow(object):
             self.questions.append(row[1])
             self.answers.append([str(row[3]), str(row[4]), str(row[5])])
             self.next_questions.append(row[8])
+            self.parameters.append(row[7])
 
         self.cur.execute('SELECT * FROM rules')
         rows = self.cur.fetchall()
         for row in rows:
             self.rules.append([row[1], row[2], row[3]])
+
+        self.cur.execute('SELECT * FROM rules_simple')
+        rows = self.cur.fetchall()
+        for row in rows:
+            self.rules_simple.append(row[1:-1])
+
+        self.cur.execute('SELECT * FROM rules_complex')
+        rows = self.cur.fetchall()
+        for row in rows:
+            self.rules_complex.append([row[1:3], row[3:5], row[5]])
 
     def check_chouse(self):
         txt = self.textEdit.toPlainText()
@@ -103,13 +139,13 @@ class Ui_MainWindow(object):
 
     def check_answer(self):
         if self.radioButton.isChecked():
-            insert_query = 'INSERT INTO answer (id_quest, anw) VALUES' + '(' + str(self.id_quest) + ', \'' + self.radioButton.text() + '\')'
+            insert_query = 'INSERT INTO answer (id_quest, anw, param) VALUES(' + str(self.id_quest) + ', \'' + self.radioButton.text() + '\' , \'' + self.parameters[self.id_quest] + '\')'
         elif self.radioButton_2.isChecked():
-            insert_query = 'INSERT INTO answer (id_quest, anw) VALUES' + '(' + str(self.id_quest) + ', \'' + self.radioButton_2.text() + '\')'
+            insert_query = 'INSERT INTO answer (id_quest, anw, param) VALUES(' + str(self.id_quest) + ', \'' + self.radioButton_2.text() + '\' , \'' + self.parameters[self.id_quest] + '\')'
         elif self.radioButton_3.isChecked():
-            insert_query = 'INSERT INTO answer (id_quest, anw) VALUES' + '(' + str(self.id_quest) + ', \'' + self.radioButton_3.text() + '\')'
+            insert_query = 'INSERT INTO answer (id_quest, anw, param) VALUES(' + str(self.id_quest) + ', \'' + self.radioButton_3.text() + '\' , \'' + self.parameters[self.id_quest] + '\')'
         else:
-            insert_query = 'INSERT INTO answer (id_quest, anw) VALUES' + '(' + str(self.id_quest) + ', \'' + self.textEdit.toPlainText() + '\')'
+            insert_query = 'INSERT INTO answer (id_quest, anw, param) VALUES(' + str(self.id_quest) + ', \'' + self.textEdit.toPlainText() + '\' , \'' + self.parameters[self.id_quest] + '\')'
         self.cur.execute(insert_query)
         self.conn.commit()
 
@@ -123,15 +159,18 @@ class Ui_MainWindow(object):
                 for ac in actualRules:
                     if rb.text() == ac[0]:
                         nextQuestion = ac[1]
-        print(nextQuestion)
+        # print(nextQuestion)
         return nextQuestion
 
     def next_question(self):
         if self.next_questions[self.id_quest] > 0:
             self.id_quest = self.next_questions[self.id_quest] - 1
+            return True
         elif self.next_questions[self.id_quest] == 0:
             self.id_quest = self.check_rules() - 1
+            return True
         elif self.next_questions[self.id_quest] == -1:
+            self.id_quest = -1
             self.end()
 
     def print_question(self):
@@ -166,16 +205,15 @@ class Ui_MainWindow(object):
         # print(self.id_quest)
         if self.check_chouse():
             self.check_answer()
-            self.next_question()
-            # print(self.id_quest)
-            self.del_check_rb()
-            self.print_question()
+            if self.next_question():
+                self.del_check_rb()
+                self.print_question()
 
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "Экспертая система"))
-        self.pushButton.setText(_translate("MainWindow", "PushButton"))
+        self.pushButton.setText(_translate("MainWindow", "Ответить"))
         self.radioButton.setText(_translate("MainWindow", "RadioButton"))
         self.radioButton_2.setText(_translate("MainWindow", "RadioButton"))
         self.radioButton_3.setText(_translate("MainWindow", "RadioButton"))
